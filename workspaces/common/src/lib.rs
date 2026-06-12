@@ -19,5 +19,6 @@ pub mod cache_settings;
 pub mod config;
 pub mod desktop_file;
 pub mod fetch;
+pub mod gtk_css;
 pub mod url;
 pub mod utils;

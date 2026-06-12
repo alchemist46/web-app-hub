@@ -11,6 +11,7 @@ use common::{
     cache_settings::CacheSettings,
     config::{self},
     fetch::Fetch,
+    gtk_css,
     utils::{self, OnceLockExt},
 };
 use error_dialog::ErrorDialog;
@@ -84,6 +85,10 @@ impl App {
             self.error_dialog.init(self);
 
             assets::init(&self.dirs)?;
+            if let Err(error) = gtk_css::apply_header_bar_override(&self.dirs) {
+                // Non-fatal: web apps still work, their title bar is just shorter.
+                error!("Failed to apply GTK header bar override: {error:?}");
+            }
             self.add_system_icon_paths();
             self.browser_configs.init();
 

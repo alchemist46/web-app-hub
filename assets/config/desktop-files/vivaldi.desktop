@@ -3,7 +3,7 @@ Version=1.0
 Type=Application
 Terminal=false
 Name=%{name}
-Exec=%{command} --no-first-run --app="%{url}" --class=vivaldi-%{domain_path}-Default --name=vivaldi-%{domain_path}-Default %{is_isolated ? --user-data-dir} %{is_maximized ? --start-maximized}
+Exec=%{launch_prefix}%{command} --no-first-run --ozone-platform=x11 --gtk-version=4 --app="%{url}" --class=vivaldi-%{domain_path}-Default --name=vivaldi-%{domain_path}-Default %{is_isolated ? --user-data-dir} %{is_maximized ? --start-maximized}
 X-MultipleArgs=false
 Icon=%{icon}
 StartupWMClass=vivaldi-%{domain_path}-Default

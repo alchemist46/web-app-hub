@@ -9,6 +9,7 @@
 )]
 
 mod application;
+mod launch;
 
 use application::App;
 use common::{
@@ -80,6 +81,13 @@ fn init_locale() {
 }
 
 fn main() {
+    // Handle the `launch` subcommand (used by isolated Chromium web app desktop
+    // files to restore window geometry) before any GUI/i18n setup. It never
+    // returns on a launch invocation.
+    if launch::maybe_run() {
+        return;
+    }
+
     if cfg!(debug_assertions) {
         println!("======== Running debug build ========");
     }

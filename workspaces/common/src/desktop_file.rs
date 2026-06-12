@@ -776,6 +776,28 @@ impl DesktopFile {
         Ok(())
     }
 
+    /// Prefix for the desktop `Exec=` that routes an isolated Chromium app
+    /// through `web-app-hub launch` so its window geometry is restored. Empty
+    /// for every other case (Firefox apps remember geometry themselves;
+    /// non-isolated apps share the user's real browser profile). The `%{command}`
+    /// placeholder that follows it is the browser run command.
+    fn build_launch_prefix(entries: &DesktopFileEntries) -> String {
+        if entries.browser.base != Base::Chromium || !entries.isolate {
+            return String::new();
+        }
+
+        let Ok(self_bin) = std::env::current_exe() else {
+            error!("Could not resolve own executable path; window size won't be remembered");
+            return String::new();
+        };
+
+        format!(
+            "\"{}\" launch --profile \"{}\" -- ",
+            self_bin.display(),
+            entries.profile_path.display()
+        )
+    }
+
     fn to_new_from_browser(&self) -> Result<DesktopFile, DesktopFileError> {
         let entries = &self.get_entries()?;
         let save_path = self.get_save_path()?;
@@ -806,6 +828,7 @@ impl DesktopFile {
         };
 
         let mut d_str = entries.browser.desktop_file.clone().to_string();
+        d_str = d_str.replace("%{launch_prefix}", &Self::build_launch_prefix(entries));
         d_str = d_str.replace("%{command}", &entries.browser.get_run_command()?);
         d_str = d_str.replace("%{name}", &entries.name);
         d_str = d_str.replace("%{url}", &entries.url);

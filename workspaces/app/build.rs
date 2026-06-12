@@ -17,7 +17,6 @@ fn main() -> Result<()> {
     create_config_symlinks(&app_dirs);
     create_data_symlinks(&app_dirs);
     create_cache_symlinks(&app_dirs);
-    copy_dev_web_apps(&app_dirs);
     copy_dev_custom_browsers(&app_dirs);
 
     install_app_desktop_file(&app_dirs)?;
@@ -42,37 +41,6 @@ fn create_data_symlinks(app_dirs: &AppDirs) {
 fn create_cache_symlinks(app_dirs: &AppDirs) {
     let cache_path = dev_cache_path();
     let _ = utils::files::create_symlink(&cache_path, &app_dirs.app_cache);
-}
-
-fn copy_dev_web_apps(app_dirs: &AppDirs) {
-    let dev_desktop_files = dev_assets_path().join("desktop-files");
-    let user_applications_dir = &app_dirs.user_applications;
-
-    for desktop_file in &utils::files::get_entries_in_dir(&dev_desktop_files).unwrap() {
-        let id = desktop_file
-            .file_name()
-            .to_string_lossy()
-            .split('-')
-            .next_back()
-            .unwrap()
-            .to_string();
-
-        let mut exists = false;
-        for file in &utils::files::get_entries_in_dir(user_applications_dir).unwrap() {
-            if file.file_name().to_string_lossy().ends_with(&id) {
-                exists = true;
-            }
-        }
-        if exists {
-            continue;
-        }
-
-        fs::copy(
-            desktop_file.path(),
-            user_applications_dir.join(desktop_file.file_name()),
-        )
-        .unwrap();
-    }
 }
 
 fn copy_dev_custom_browsers(app_dirs: &AppDirs) {
