@@ -51,3 +51,15 @@ Edition 2024, see `rustfmt.toml`.
 ```
 
 Requires `flatpak-builder` plus the GNOME 50 SDK/Platform and the Rust SDK extension. Installs as `org.pvermeer.WebAppHub`.
+
+## Local RPM build (Fedora)
+
+```sh
+./packaging/rpm/build-rpm.sh
+```
+
+Requires `rpm-build` and `rpmdevtools` (`sudo dnf install -y rpm-build rpmdevtools`). The script runs `cargo build --release`, stages the binary plus the desktop entry, icon and metainfo from `assets/desktop/`, builds the RPM under `target/rpmbuild/`, and copies the result to `target/web-app-hub-<version>-1.<dist>.x86_64.rpm`.
+
+The spec (`packaging/rpm/web-app-hub.spec`) packages the pre-built release binary (no compile inside `rpmbuild`, `debug_package` disabled) — this is fast and avoids running `build.rs`'s home-directory side effects under the rpm sandbox. The version is read from `Cargo.toml`. Runtime deps (`gtk4`, `libadwaita`, …) are auto-detected from the ELF; unlike the Flatpak it links against system GTK4 and runs unsandboxed.
+
+Install with `sudo dnf install ./target/web-app-hub-<version>-1.<dist>.x86_64.rpm`, and uninstall with `sudo dnf remove web-app-hub`.
