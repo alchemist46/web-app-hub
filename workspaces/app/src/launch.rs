@@ -41,8 +41,12 @@ fn run(args: Vec<String>) -> ! {
         std::process::exit(2);
     }
 
-    if let Some(profile) = profile
-        && let Some(flags) = geometry_flags(&profile, &browser_cmd)
+    if let Some(profile) = &profile {
+        clear_stale_singleton_lock(profile);
+    }
+
+    if let Some(profile) = &profile
+        && let Some(flags) = geometry_flags(profile, &browser_cmd)
     {
         browser_cmd.extend(flags);
     }
@@ -77,6 +81,54 @@ fn parse_args(args: Vec<String>) -> (Option<PathBuf>, Vec<String>) {
     }
 
     (profile, browser_cmd)
+}
+
+/// Chromium normally recovers from a stale `SingletonLock` (left behind when
+/// a previous run of this profile was killed rather than closed cleanly) by
+/// checking whether the PID it names is still alive on the *same hostname*.
+/// This machine has no static hostname set, so its transient hostname can
+/// differ between the run that wrote the lock and the run that reads it —
+/// when it does, Chromium can't confirm the lock is stale and refuses to
+/// open a window at all, with nothing telling the user why. Since this
+/// profile is exclusively used by one isolated web app, it's safe for us to
+/// clear the lock ourselves whenever the PID it names is dead or belongs to
+/// an unrelated process, regardless of what hostname it was stamped with.
+fn clear_stale_singleton_lock(profile: &Path) {
+    let Ok(target) = std::fs::read_link(profile.join("SingletonLock")) else {
+        return;
+    };
+    let Some(pid) = parse_lock_pid(&target.to_string_lossy()) else {
+        return;
+    };
+
+    if process_owns_profile(pid, profile) {
+        return;
+    }
+
+    for file_name in ["SingletonLock", "SingletonSocket", "SingletonCookie"] {
+        let _ = std::fs::remove_file(profile.join(file_name));
+    }
+}
+
+/// `SingletonLock` points to `<hostname>-<pid>`; the hostname itself may
+/// contain hyphens, so split from the right to reliably isolate the PID.
+fn parse_lock_pid(lock_target: &str) -> Option<u32> {
+    let (_, pid_str) = lock_target.rsplit_once('-')?;
+    pid_str.parse().ok()
+}
+
+/// Whether `pid` is alive and its command line still references `profile`
+/// (as `--user-data-dir=<profile>`). A dead PID, or one reused since by an
+/// unrelated process, means the lock it left behind is safe to clear.
+fn process_owns_profile(pid: u32, profile: &Path) -> bool {
+    let Ok(cmdline) = std::fs::read_to_string(format!("/proc/{pid}/cmdline")) else {
+        return false;
+    };
+
+    cmdline
+        .split('\0')
+        .filter_map(|arg| arg.strip_prefix("--user-data-dir="))
+        .any(|dir| Path::new(dir) == profile)
 }
 
 /// Build the geometry flags to restore the window, or `None` when there is
@@ -153,6 +205,43 @@ mod tests {
         let (profile, cmd) = parse_args(args);
         assert_eq!(profile, Some(PathBuf::from("/tmp/p")));
         assert_eq!(cmd, ["brave-browser", "--app=https://example.com"]);
+    }
+
+    #[test]
+    fn parses_pid_from_lock_target_with_plain_hostname() {
+        assert_eq!(parse_lock_pid("fedora-9149"), Some(9149));
+    }
+
+    #[test]
+    fn parses_pid_from_lock_target_with_hyphenated_hostname() {
+        assert_eq!(parse_lock_pid("DESKTOP-2F5HJ6B-7664"), Some(7664));
+    }
+
+    #[test]
+    fn rejects_lock_target_without_pid() {
+        assert_eq!(parse_lock_pid("not-a-pid-here-abc"), None);
+        assert_eq!(parse_lock_pid("nohyphen"), None);
+    }
+
+    #[test]
+    fn dead_pid_does_not_own_profile() {
+        // PID 1 is always alive but never a match for this made-up profile,
+        // and out-of-range PIDs have no /proc entry at all either way.
+        assert!(!process_owns_profile(1, Path::new("/does/not/exist")));
+        assert!(!process_owns_profile(
+            u32::MAX,
+            Path::new("/does/not/exist")
+        ));
+    }
+
+    #[test]
+    fn live_process_without_matching_user_data_dir_does_not_own_profile() {
+        // This test process is alive but was never launched with
+        // --user-data-dir, so it must not be mistaken for the profile owner.
+        assert!(!process_owns_profile(
+            std::process::id(),
+            Path::new("/some/profile/path")
+        ));
     }
 
     #[test]
